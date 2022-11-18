@@ -24,7 +24,6 @@ class Compose:
             image, target = t(image, target)
         return image, target
 
-
 class RandomHorizontalFlip(T.RandomHorizontalFlip):
     def forward(
         self, image: Tensor, target: Optional[Dict[str, Tensor]] = None
