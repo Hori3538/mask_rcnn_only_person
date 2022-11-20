@@ -47,9 +47,13 @@ def get_transform(train: bool) -> T.Compose:
         transforms.append(T.RandomHorizontalFlip(0.5))
     return T.Compose(transforms)
 
+# def draw_bbox(image: cv.Mat, rect: cv.Rect, int id)
+
 def test() -> None:
     from torch.utils.data import DataLoader
     from argparse import ArgumentParser
+    import cv2
+    import numpy as np
 
     parser = ArgumentParser()
     parser.add_argument("--images-root-path", type=str)
@@ -59,17 +63,23 @@ def test() -> None:
     dataset = CustomDataset(root=args.images_root_path, annFile=args.json_annotation_path,
             transforms=get_transform(train=True))
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=utils.utils.collate_fn)
-    dataset[0]
 
     # images, targets = next(iter(dataloader))
     for image, target in dataloader:
-        print(f"shape of images: {image[0].shape}")
-        # print(f"type of images: {type(image)}")
-        print(image)
-        print(f"shape of targets: {target[0]}\n")
+        # print(f"shape of targets: {type(target[0])}\n")
         # print(f"type of targets: {type(target)}\n")
-        print(target)
-        pass
+        # print(target[0]['labels'])
+        # if 91 in target[0]['labels']: print("djfkdkjd")
+
+        image = image[0].permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        print(type(image))
+        print(image.shape)
+        # cv2.imshow("images", image)
+        # key = cv2.waitKey(0)
+        # if key == ord("q") or key == ord("c"):
+        #     break
+        # cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     test()
