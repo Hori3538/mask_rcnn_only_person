@@ -10,13 +10,10 @@ class CustomDataset(CocoDetection):
         idx = self.ids[index]
         image = self._load_image(idx)
         target = self._load_target(idx)
-        # print(f"target: {target}")
 
         #target(アノテーションデータ)をデータセットとして読み込めるように変換する      
         boxes = [x['bbox'] for x in target]
-        # print(f"boxes: {boxes}\n")
         labels = [x['category_id'] for x in target]
-        # print(f"labels: {labels}")
         image_id = idx
         area = [box[2] * box[3] for box in boxes]
         iscrowd = [x['iscrowd'] for x in target]
@@ -24,10 +21,7 @@ class CustomDataset(CocoDetection):
 
         targets = {}
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
-        # print(f"boxes tensor: {boxes}")
-        # print(f"boxes.nelement: {boxes.nelement()}")
         targets["boxes"] = torchvision.ops.box_convert(boxes,'xywh','xyxy') if boxes.nelement()!=0 else []
-        # print(f"converted boxes: {targets['boxes']}")
         targets["labels"] = torch.as_tensor(labels, dtype=torch.int64)
         targets["masks"] = torch.as_tensor(masks, dtype=torch.uint8)
         targets["image_id"] = torch.tensor([image_id])
@@ -63,51 +57,30 @@ def test() -> None:
     args = parser.parse_args()
 
     class_names = np.loadtxt(args.label_file_path, dtype='str', delimiter='\n')
-    # print(class_names)
     colors = np.loadtxt(args.colors_file_path, dtype='int', delimiter=' ')
-    # print(colors)
-    # print(len(colors[0]))
     drawer = Drawer(class_names, colors)
 
     dataset = CustomDataset(root=args.images_root_path, annFile=args.json_annotation_path,
             transforms=get_transform(train=True))
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=utils.utils.collate_fn)
 
-    # images, targets = next(iter(dataloader))
     for image, target in dataloader:
-        # print(f"shape of targets: {type(target[0])}\n")
-        # print(f"type of targets: {type(target)}\n")
-        # print(target[0]['labels'])
-        # if 91 in target[0]['labels']: print("djfkdkjd")
 
         image = image[0].permute(1, 2, 0).cpu().numpy().astype(np.uint8)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        # print(f"shape of image: {image.shape}")
+        image_original = image.copy()
 
         object_num = target[0]['labels'].nelement()
-        # print(f"object_num: {object_num}")
         boxes = target[0]['boxes']
         labels = target[0]['labels']
         masks = target[0]['masks']
-        # print(f"type of mask: {type(masks)}")
-        # print(f"shape of mask: {masks.shape}")
         for i in range(object_num):
-            # print(boxes[i].tolist())
             rect: List[int] = [int(data) for data in boxes[i].tolist()]
             id: int = labels[i]
             mask = masks[i].numpy() * 255
-            # print(mask)
-            cv2.imshow("mask", mask)
-            key = cv2.waitKey(0)
-            if key == ord("q") or key == ord("c"):
-                break
-            cv2.destroyAllWindows()
-            # print(f"rect: {rect}")
-            drawer.draw_bbox(image, rect, id)
+            drawer.draw_bbox(image, image_original, mask, rect, id)
 
-        # print(type(image))
-        # print(image.shape)
-        cv2.imshow("images", image)
+        cv2.imshow("image", image)
         key = cv2.waitKey(0)
         if key == ord("q") or key == ord("c"):
             break
@@ -118,15 +91,13 @@ class Drawer():
         self._class_names = class_names
         self._colors = colors
 
-    def draw_bbox(self, image: np.ndarray, rect: List[int], id: int) -> None:
-        # print(f"rect[:2]: {rect[:2]}")
+    def draw_bbox(self, image: np.ndarray, image_original: np.ndarray, mask, rect: List[int], id: int) -> None:
         cv2.rectangle(image, rect[:2], rect[2:], (255, 255, 255), 2)
-        # cv2.rectangle(image, (50, 50), (50, 50), (255, 255, 255), 2)
         cv2.putText(image, self._class_names[id-1], rect[:2],
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-
-        
-
+        color = self._colors[id %  len(self._colors)]
+        colored_roi = (0.3 * color + 0.7 * image_original).astype(np.uint8)
+        image[:] = np.where(mask[:, :, np.newaxis] == 0, image, colored_roi)
 
 if __name__ == "__main__":
     test()
