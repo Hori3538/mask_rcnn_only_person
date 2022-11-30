@@ -28,18 +28,20 @@ class CustomDataset(CocoDetection):
         targets["area"] = torch.tensor(area)
         targets["iscrowd"] = torch.as_tensor(iscrowd, dtype=torch.int64)
 
+        # PIL -> tensor
+        image, targets = T.PILToTensor()(image, targets)
         #transformsを受け取っていれば内容に従って変換する
-        if self.transforms is not None:
+        if self.transforms is not None and len(labels) != 0:
             image, targets = self.transforms(image, targets)
 
         return image, targets
 
-def get_transform(train: bool) -> T.Compose:
-    transforms = []
-    transforms.append(T.PILToTensor())
-    if train:
-        transforms.append(T.RandomHorizontalFlip(0.5))
-    return T.Compose(transforms)
+# def get_transform(train: bool) -> T.Compose:
+#     transforms = []
+#     # transforms.append(T.PILToTensor())
+#     if train:
+#         transforms.append(T.RandomHorizontalFlip(0.5))
+    # return T.Compose(transforms)
 
 from torch.utils.data import DataLoader
 from argparse import ArgumentParser
@@ -54,16 +56,29 @@ def test() -> None:
     parser.add_argument("--json-annotation-path", type=str)
     parser.add_argument("--label-file-path", type=str, default="./object_detection_classes_coco.txt")
     parser.add_argument("--colors-file-path", type=str, default="./colors.txt")
+    parser.add_argument("--is-custom", type=bool, default=True)
     args = parser.parse_args()
 
-    class_names = np.loadtxt(args.label_file_path, dtype='str', delimiter='\n')
+    # fiftyoneをインストールしたあたりから動かなくなった
+    # class_names = np.loadtxt(args.label_file_path, dtype='str', delimiter='\n')
+    class_names = []
+    with open(args.label_file_path) as f:
+        while True:
+            label = f.readline().rstrip()
+            if label:
+                class_names.append(label)
+            else:
+                break
     colors = np.loadtxt(args.colors_file_path, dtype='int', delimiter=' ')
-    drawer = Drawer(class_names, colors)
 
+    drawer = Drawer(class_names, colors, args.is_custom)
+
+    transform = T.RandomHorizontalFlip(0.5)
     dataset = CustomDataset(root=args.images_root_path, annFile=args.json_annotation_path,
-            transforms=get_transform(train=True))
+            transforms=transform)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=utils.utils.collate_fn)
 
+    print(f"datal len: {len(dataset)}")
     for image, target in dataloader:
 
         image = image[0].permute(1, 2, 0).cpu().numpy().astype(np.uint8)
@@ -87,13 +102,15 @@ def test() -> None:
         cv2.destroyAllWindows()
 
 class Drawer():
-    def __init__(self, class_names, colors) -> None:
+    def __init__(self, class_names, colors, is_custom) -> None:
         self._class_names = class_names
         self._colors = colors
+        self._is_custom = is_custom
 
     def draw_bbox(self, image: np.ndarray, image_original: np.ndarray, mask, rect: List[int], id: int) -> None:
         cv2.rectangle(image, rect[:2], rect[2:], (255, 255, 255), 2)
-        cv2.putText(image, self._class_names[id-1], rect[:2],
+        class_name = self._class_names[id] if self._is_custom else self._class_names[id-1]
+        cv2.putText(image, class_name, rect[:2],
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
         color = self._colors[id %  len(self._colors)]
         colored_roi = (0.3 * color + 0.7 * image_original).astype(np.uint8)
