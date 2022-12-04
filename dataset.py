@@ -1,8 +1,10 @@
 from torchvision.datasets import CocoDetection
 import torchvision
 import torch
-import utils.transforms as T
-import utils.utils
+# import utils.transforms as T
+import transforms as T
+# import utils.utils
+import utils
 
 class CustomDataset(CocoDetection):
     def __getitem__(self, index):
@@ -30,18 +32,21 @@ class CustomDataset(CocoDetection):
 
         # PIL -> tensor
         image, targets = T.PILToTensor()(image, targets)
+        image = image / 255
+
         #transformsを受け取っていれば内容に従って変換する
         if self.transforms is not None and len(labels) != 0:
             image, targets = self.transforms(image, targets)
 
         return image, targets
 
-# def get_transform(train: bool) -> T.Compose:
-#     transforms = []
-#     # transforms.append(T.PILToTensor())
-#     if train:
-#         transforms.append(T.RandomHorizontalFlip(0.5))
-    # return T.Compose(transforms)
+    @classmethod
+    def get_transform(cls, train: bool) -> T.Compose:
+        transforms = []
+        # transforms.append(T.PILToTensor())
+        if train:
+            transforms.append(T.RandomHorizontalFlip(0.5))
+        return T.Compose(transforms)
 
 from torch.utils.data import DataLoader
 from argparse import ArgumentParser
@@ -52,8 +57,8 @@ from typing import List
 
 def test() -> None:
     parser = ArgumentParser()
-    parser.add_argument("--images-root-path", type=str)
-    parser.add_argument("--json-annotation-path", type=str)
+    parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/val2017_person_only/data")
+    parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/val2017_person_only/labels.json")
     parser.add_argument("--label-file-path", type=str, default="./object_detection_classes_coco.txt")
     parser.add_argument("--colors-file-path", type=str, default="./colors.txt")
     parser.add_argument("--is-custom", type=bool, default=True)
@@ -73,15 +78,17 @@ def test() -> None:
 
     drawer = Drawer(class_names, colors, args.is_custom)
 
-    transform = T.RandomHorizontalFlip(0.5)
+    # transform = T.RandomHorizontalFlip(0.5)
     dataset = CustomDataset(root=args.images_root_path, annFile=args.json_annotation_path,
-            transforms=transform)
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=utils.utils.collate_fn)
+            transforms=CustomDataset.get_transform(True))
+    # dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=utils.utils.collate_fn)
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=True, collate_fn=utils.collate_fn)
 
     print(f"datal len: {len(dataset)}")
     for image, target in dataloader:
 
-        image = image[0].permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+        # image = image[0].permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+        image = (image[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         image_original = image.copy()
 
