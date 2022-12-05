@@ -12,7 +12,7 @@ class CustomDataset(CocoDetection):
         idx = self.ids[index]
         image = self._load_image(idx)
         target = self._load_target(idx)
-        for i, t in enumerate(target):
+        for i, t in reversed(list(enumerate(target))):
             if not t['segmentation']:
                 del target[i]
 
@@ -35,12 +35,8 @@ class CustomDataset(CocoDetection):
         targets["area"] = torch.tensor(area)
         targets["iscrowd"] = torch.as_tensor(iscrowd, dtype=torch.int64)
 
-        # PIL -> tensor
-        # image, targets = T.PILToTensor()(image, targets)
-
         #transformsを受け取っていれば内容に従って変換する
         if self.transforms is not None:
-        # if self.transforms is not None and len(labels) != 0:
             image, targets = self.transforms(image, targets)
 
         return image, targets
@@ -63,10 +59,10 @@ from typing import List
 
 def test() -> None:
     parser = ArgumentParser()
-    # parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/val2017_person_only/data")
-    parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/train2017_person_only/data")
-    # parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/val2017_person_only/labels.json")
-    parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/train2017_person_only/labels.json")
+    parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/val2017_person_only/data")
+    # parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/train2017_person_only/data")
+    parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/val2017_person_only/labels.json")
+    # parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/train2017_person_only/labels.json")
     parser.add_argument("--label-file-path", type=str, default="./object_detection_classes_coco.txt")
     parser.add_argument("--colors-file-path", type=str, default="./colors.txt")
     parser.add_argument("--is-custom", type=bool, default=True)
@@ -89,7 +85,7 @@ def test() -> None:
 
     dataset = CustomDataset(root=args.images_root_path, annFile=args.json_annotation_path,
             transforms=CustomDataset.get_transform(True))
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True, collate_fn=utils.collate_fn)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True, collate_fn=utils.collate_fn)
 
     print(f"datal len: {len(dataset)}")
     for image, target in dataloader:
