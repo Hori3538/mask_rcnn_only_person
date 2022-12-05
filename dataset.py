@@ -12,6 +12,9 @@ class CustomDataset(CocoDetection):
         idx = self.ids[index]
         image = self._load_image(idx)
         target = self._load_target(idx)
+        for i, t in enumerate(target):
+            if not t['segmentation']:
+                del target[i]
 
         #target(アノテーションデータ)をデータセットとして読み込めるように変換する      
         boxes = [x['bbox'] for x in target]
@@ -19,23 +22,25 @@ class CustomDataset(CocoDetection):
         image_id = idx
         area = [box[2] * box[3] for box in boxes]
         iscrowd = [x['iscrowd'] for x in target]
+
         masks = [self.coco.annToMask(x) for x in target]
 
         targets = {}
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         targets["boxes"] = torchvision.ops.box_convert(boxes,'xywh','xyxy') if boxes.nelement()!=0 else []
         targets["labels"] = torch.as_tensor(labels, dtype=torch.int64)
+        masks = np.array(masks)
         targets["masks"] = torch.as_tensor(masks, dtype=torch.uint8)
         targets["image_id"] = torch.tensor([image_id])
         targets["area"] = torch.tensor(area)
         targets["iscrowd"] = torch.as_tensor(iscrowd, dtype=torch.int64)
 
         # PIL -> tensor
-        image, targets = T.PILToTensor()(image, targets)
-        image = image / 255
+        # image, targets = T.PILToTensor()(image, targets)
 
         #transformsを受け取っていれば内容に従って変換する
-        if self.transforms is not None and len(labels) != 0:
+        if self.transforms is not None:
+        # if self.transforms is not None and len(labels) != 0:
             image, targets = self.transforms(image, targets)
 
         return image, targets
@@ -43,7 +48,8 @@ class CustomDataset(CocoDetection):
     @classmethod
     def get_transform(cls, train: bool) -> T.Compose:
         transforms = []
-        # transforms.append(T.PILToTensor())
+        transforms.append(T.PILToTensor())
+        transforms.append(T.ConvertImageDtype(torch.float))
         if train:
             transforms.append(T.RandomHorizontalFlip(0.5))
         return T.Compose(transforms)
@@ -57,8 +63,10 @@ from typing import List
 
 def test() -> None:
     parser = ArgumentParser()
-    parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/val2017_person_only/data")
-    parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/val2017_person_only/labels.json")
+    # parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/val2017_person_only/data")
+    parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/train2017_person_only/data")
+    # parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/val2017_person_only/labels.json")
+    parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/train2017_person_only/labels.json")
     parser.add_argument("--label-file-path", type=str, default="./object_detection_classes_coco.txt")
     parser.add_argument("--colors-file-path", type=str, default="./colors.txt")
     parser.add_argument("--is-custom", type=bool, default=True)
@@ -66,6 +74,7 @@ def test() -> None:
 
     # fiftyoneをインストールしたあたりから動かなくなった
     # class_names = np.loadtxt(args.label_file_path, dtype='str', delimiter='\n')
+
     class_names = []
     with open(args.label_file_path) as f:
         while True:
@@ -78,16 +87,13 @@ def test() -> None:
 
     drawer = Drawer(class_names, colors, args.is_custom)
 
-    # transform = T.RandomHorizontalFlip(0.5)
     dataset = CustomDataset(root=args.images_root_path, annFile=args.json_annotation_path,
             transforms=CustomDataset.get_transform(True))
-    # dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=utils.utils.collate_fn)
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True, collate_fn=utils.collate_fn)
 
     print(f"datal len: {len(dataset)}")
     for image, target in dataloader:
 
-        # image = image[0].permute(1, 2, 0).cpu().numpy().astype(np.uint8)
         image = (image[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         image_original = image.copy()
