@@ -35,7 +35,8 @@ class RandomHorizontalFlip(T.RandomHorizontalFlip):
             image = F.hflip(image)
             if target is not None:
                 _, _, width = F.get_dimensions(image)
-                target["boxes"][:, [0, 2]] = width - target["boxes"][:, [2, 0]]
+                if target["boxes"].nelement() != 0:
+                    target["boxes"][:, [0, 2]] = width - target["boxes"][:, [2, 0]]
                 if "masks" in target:
                     target["masks"] = target["masks"].flip(-1)
                 if "keypoints" in target:

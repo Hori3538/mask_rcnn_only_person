@@ -44,12 +44,17 @@ def get_model_instance_segmentation(num_classes):
 def main():
     parser = ArgumentParser()
     parser.add_argument("--train_images-root-path", type=str, default="~/person_only_coco/train2017_person_only/data")
+    # parser.add_argument("--train_images-root-path", type=str, default="~/coco_data/train2017")
     parser.add_argument("--train_json-annotation-path", type=str, default="/home/amsl/person_only_coco/train2017_person_only/labels.json")
+    # parser.add_argument("--train_json-annotation-path", type=str, default="/home/amsl/coco_data/annotations/instances_train2017.json")
     parser.add_argument("--val_images-root-path", type=str, default="~/person_only_coco/val2017_person_only/data")
+    # parser.add_argument("--val_images-root-path", type=str, default="~/coco_data/val2017")
     parser.add_argument("--val_json-annotation-path", type=str, default="/home/amsl/person_only_coco/val2017_person_only/labels.json")
+    # parser.add_argument("--val_json-annotation-path", type=str, default="/home/amsl/coco_data/annotations/instances_val2017.json")
     parser.add_argument("--label-file-path", type=str, default="./object_detection_classes_coco.txt")
     parser.add_argument("--colors-file-path", type=str, default="./colors.txt")
     parser.add_argument("--is-custom", type=bool, default=True)
+    parser.add_argument("--num-classes", type=int, default=2)
     args = parser.parse_args()
 
     # fiftyoneをインストールしたあたりから動かなくなった
@@ -64,13 +69,12 @@ def main():
                 break
     colors = np.loadtxt(args.colors_file_path, dtype='int', delimiter=' ')
 
-    drawer = Drawer(class_names, colors, args.is_custom)
+    drawer = Drawer(class_names, colors)
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    # transform = T.RandomHorizontalFlip(0.5)
-    dataset_train = CustomDataset(root=args.train_images_root_path, annFile=args.train_json_annotation_path, transforms=CustomDataset.get_transform(True))
-    dataset_val = CustomDataset(root=args.val_images_root_path, annFile=args.val_json_annotation_path, transforms=CustomDataset.get_transform(False))
+    dataset_train = CustomDataset(root=args.train_images_root_path, annFile=args.train_json_annotation_path, transforms=CustomDataset.get_transform(True), is_custom=args.is_custom)
+    dataset_val = CustomDataset(root=args.val_images_root_path, annFile=args.val_json_annotation_path, transforms=CustomDataset.get_transform(False), is_custom=args.is_custom)
     
     indices_train = torch.randperm(len(dataset_train)).tolist()
     indices_val = torch.randperm(len(dataset_val)).tolist()
@@ -84,7 +88,7 @@ def main():
             dataset_val, batch_size=4, shuffle=True, num_workers=0, collate_fn=utils.collate_fn
         )
 
-    num_classes = 1
+    num_classes = args.num_classes
     # model = models.detection.maskrcnn_resnet50_fpn_v2(num_classes=2)
     # model = models.detection.maskrcnn_resnet50_fpn(num_classes=2)
     model = get_model_instance_segmentation(num_classes)
@@ -105,27 +109,27 @@ def main():
                     dataset_val, batch_size=4, shuffle=True, num_workers=0, collate_fn=utils.collate_fn)
     model_path = 'model.pth'
     torch.save(model.state_dict(), model_path)
-    for image, target in data_loader_test:
-
-        image = (image[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        image_original = image.copy()
-
-        object_num = target[0]['labels'].nelement()
-        boxes = target[0]['boxes']
-        labels = target[0]['labels']
-        masks = target[0]['masks']
-        for i in range(object_num):
-            rect: List[int] = [int(data) for data in boxes[i].tolist()]
-            id: int = labels[i]
-            mask = masks[i].numpy() * 255
-            drawer.draw_bbox(image, image_original, mask, rect, id)
-
-        cv2.imshow("image", image)
-        key = cv2.waitKey(0)
-        if key == ord("q") or key == ord("c"):
-            break
-        cv2.destroyAllWindows()
+    # for image, target in data_loader_test:
+    #
+    #     image = (image[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
+    #     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    #     image_original = image.copy()
+    #
+    #     object_num = target[0]['labels'].nelement()
+    #     boxes = target[0]['boxes']
+    #     labels = target[0]['labels']
+    #     masks = target[0]['masks']
+    #     for i in range(object_num):
+    #         rect: List[int] = [int(data) for data in boxes[i].tolist()]
+    #         id: int = labels[i]
+    #         mask = masks[i].numpy() * 255
+    #         drawer.draw_bbox(image, image_original, mask, rect, id)
+    #
+    #     cv2.imshow("image", image)
+    #     key = cv2.waitKey(0)
+    #     if key == ord("q") or key == ord("c"):
+    #         break
+    #     cv2.destroyAllWindows()
     # model.eval() 
     #
     #     # Let's create a dummy input tensor  
