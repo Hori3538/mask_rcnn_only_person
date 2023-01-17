@@ -1,6 +1,7 @@
 from torchvision.datasets import CocoDetection
 import torchvision
 import torch
+import torch.utils.data
 # import utils.transforms as T
 import transforms as T
 # import utils.utils
@@ -24,30 +25,46 @@ class CustomDataset(CocoDetection):
                 del target[i]
 
         #target(アノテーションデータ)をデータセットとして読み込めるように変換する      
-        boxes = [x['bbox'] for x in target]
         labels = [x['category_id'] for x in target]
-
         # クラスのindexは1始まりであってほしいが，
         # fiftyoneでデータを自作するとindexが0始まりになるので1足す
         if self._is_custom:
             for i in range(len(labels)):
                 labels[i] += 1
 
-        image_id = idx
+        boxes = [x['bbox'] for x in target]
         area = [box[2] * box[3] for box in boxes]
         iscrowd = [x['iscrowd'] for x in target]
-
         masks = [self.coco.annToMask(x) for x in target]
-
-        targets = {}
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
-        targets["boxes"] = torchvision.ops.box_convert(boxes,'xywh','xyxy') if boxes.nelement()!=0 else torch.tensor([])
-        targets["labels"] = torch.as_tensor(labels, dtype=torch.int64)
-        masks = np.array(masks)
-        targets["masks"] = torch.as_tensor(masks, dtype=torch.uint8)
-        targets["image_id"] = torch.tensor([image_id])
-        targets["area"] = torch.tensor(area)
-        targets["iscrowd"] = torch.as_tensor(iscrowd, dtype=torch.int64)
+        targets = {}
+        # targets["image_id"] = torch.tensor([idx])
+
+        obj_num = len(target)
+        if obj_num == 0:
+            # objの情報がないデータがあるとtrain時にエラーになるので，
+            # objの情報がないデータに適当な情報をいれる．あまり良くない対策だと思う
+
+            # targets["boxes"] = torch.tensor([[0, 0, 0, 0]])
+            targets["boxes"] = torch.tensor([[0, 0, 1, 1]])
+            targets["labels"] = torch.tensor([0], dtype=torch.int64)
+            targets["masks"] = torch.zeros(1, image.size[1], image.size[0])
+            targets["image_id"] = torch.tensor([idx])
+            targets["area"] = torch.tensor([0])
+            targets["iscrowd"] = torch.as_tensor([0], dtype=torch.int64)
+        else:
+            targets["boxes"] = torchvision.ops.box_convert(boxes,'xywh','xyxy')
+            targets["labels"] = torch.as_tensor(labels, dtype=torch.int64)
+            masks = np.array(masks)
+            targets["masks"] = torch.as_tensor(masks, dtype=torch.uint8)
+            targets["image_id"] = torch.tensor([idx])
+            targets["area"] = torch.tensor(area)
+            targets["iscrowd"] = torch.as_tensor(iscrowd, dtype=torch.int64)
+        # if idx == 2466:
+        #     print(image.size)
+        #     print(obj_num)
+        #     print(targets["boxes"])
+        #     print(targets["masks"].shape)
 
         #transformsを受け取っていれば内容に従って変換する
         if self.transforms is not None:
@@ -73,10 +90,10 @@ from typing import List
 
 def test() -> None:
     parser = ArgumentParser()
-    # parser.add_argument("--images-root-path", type=str, default="~/coco_data/train2017")
-    parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/train2017_person_only/data")
-    # parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/coco_data/annotations/instances_train2017.json")
-    parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/train2017_person_only/labels.json")
+    # parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/train2017_person_only/data")
+    parser.add_argument("--images-root-path", type=str, default="~/person_only_coco/val2017_person_only/data")
+    # parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/train2017_person_only/labels.json")
+    parser.add_argument("--json-annotation-path", type=str, default="/home/amsl/person_only_coco/val2017_person_only/labels.json")
     parser.add_argument("--label-file-path", type=str, default="./object_detection_classes_coco.txt")
     parser.add_argument("--colors-file-path", type=str, default="./colors.txt")
     parser.add_argument("--is-custom", type=bool, default=True)
@@ -98,8 +115,10 @@ def test() -> None:
     drawer = Drawer(class_names, colors)
 
     dataset = CustomDataset(root=args.images_root_path, annFile=args.json_annotation_path,
-            transforms=CustomDataset.get_transform(True), is_custom=args.is_custom)
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=True, collate_fn=utils.collate_fn)
+            transforms=CustomDataset.get_transform(False), is_custom=args.is_custom)
+    indices = [n for n in range(2465, len(dataset))]
+    dataset = torch.utils.data.Subset(dataset, indices)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=utils.collate_fn)
     # dataloader = DataLoader(dataset, batch_size=2048, shuffle=True, collate_fn=utils.collate_fn)
 
     for image, target in dataloader:
@@ -112,6 +131,7 @@ def test() -> None:
         boxes = target[0]['boxes']
         labels = target[0]['labels']
         masks = target[0]['masks']
+        print(f"target: {target}")
         for i in range(object_num):
             rect: List[int] = [int(data) for data in boxes[i].tolist()]
             id: int = labels[i]
